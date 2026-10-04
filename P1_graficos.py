@@ -19,8 +19,8 @@ def graficar_rmse(ruta_csv, ruta_guardado, semilla, N, pasada_fina: bool):
     for nombre, rmse in curvas.items():
         linea, = ax.plot(sigma, rmse, label=nombre)
         color = linea.get_color()
-
-        ax.axhline(rmse[0], color=color, linestyle=":", alpha=0.5)
+        if 0.0 in sigma:
+            ax.axhline(rmse[0], color=color, linestyle=":", alpha=0.5)
 
         i = np.argmin(rmse)
         ax.scatter(sigma[i], rmse[i], color=color, edgecolor="k", zorder=3,
@@ -31,7 +31,9 @@ def graficar_rmse(ruta_csv, ruta_guardado, semilla, N, pasada_fina: bool):
     ax.set_xlabel("σ del filtro Gaussiano")
     ax.set_ylabel("RMSE")
     ax.set_yscale("linear")
-    titulo = f"RMSE(σ) por región | semilla={semilla}, N={N}, σ∈[{sigma[0]:g}, {sigma[-1]:g}], {len(sigma)} valores\n(líneas punteadas = sin Filtro)"
+    titulo = f"RMSE(σ) por región | semilla={semilla}, N={N}, σ∈[{sigma[0]:g}, {sigma[-1]:g}], {len(sigma)} valores"
+    if 0.0 in sigma:
+        titulo += "\n(líneas punteadas = solo Poisson)"
     ax.set_title(titulo)
     ax.grid(alpha=0.3)
     ax.legend(fontsize=8)
