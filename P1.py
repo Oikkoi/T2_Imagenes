@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 from skimage import io
+import os
+import csv
 
 
 def sumar_fondo():
@@ -42,6 +44,8 @@ def añadir_ruido(lienzo, semilla: int):
 
 
 def calcular_kernel(sigma):
+    if sigma < 0:
+        raise ValueError("La desviación estándar no puede ser negativa")
     if sigma == 0:
         lienzo = np.zeros((1, 1)) + 1
         return lienzo
@@ -58,6 +62,61 @@ def calcular_kernel(sigma):
 def aplicar_kernel(imagen, kernel):
     imagen_ruido = cv2.filter2D(imagen, -1, kernel)
     return imagen_ruido
+
+
+def obtener_imagen_final(semilla: int, desviacion_estandar: float,
+                         mostrar_og: bool = True, mostrar_final: bool = True, ruta_complementaria: str = ""):
+    # Setting para guardar
+    ruta = os.path.dirname(__file__)
+    ruta_guardado = os.path.join(ruta, "Resultados_P1", ruta_complementaria)
+    os.makedirs(ruta_guardado, exist_ok=True)
+    # Código para calcular
+    imagen_og, mascaras = crear_lienzo()
+    circulo, cuadrada, fondo = mascaras
+
+    if mostrar_og:  # Mostrar imagen original
+        visualizacion(imagen_og, "imagen original")
+    # Añadir poisson y convolución con el kernel
+    imagen_poisson = añadir_ruido(imagen_og, semilla)
+    kernel = calcular_kernel(desviacion_estandar)
+    imagen_filtrada = aplicar_kernel(imagen_poisson, kernel)
+
+    if mostrar_final:  # Mostrar imagen final
+        visualizacion(imagen_filtrada,
+                      "imagen con filtro poisson y distribución gaussiana")
+
+    # Segmento de guardado
+    nombre_img_original = f"{desviacion_estandar}_img_og.png"
+    ruta_img_og = os.path.join(ruta_guardado, nombre_img_original)
+    imagen_para_guardar_inicial = (
+        imagen_og * 255).clip(0, 255).astype(np.uint8)
+    cv2.imwrite(ruta_img_og, imagen_para_guardar_inicial)
+    imagen_para_guardar_final = (
+        imagen_filtrada * 255).clip(0, 255).astype(np.uint8)
+    nombre_img_filtrada = f"{desviacion_estandar}_img_filtrada.png"
+    ruta_img_filtrada = os.path.join(ruta_guardado, nombre_img_filtrada)
+    cv2.imwrite(ruta_img_filtrada, imagen_para_guardar_final)
+
+    # Segmento RMSE
+    rmse_c = calcular_rmse(imagen_og, imagen_filtrada, circulo)
+    rmse_s = calcular_rmse(imagen_og, imagen_filtrada, cuadrada)
+    rmse_f = calcular_rmse(imagen_og, imagen_filtrada, fondo)
+
+    mascara_total = circulo | cuadrada | fondo
+    rmse_tot = calcular_rmse(imagen_og, imagen_filtrada, mascara_total)
+
+    nombre_csv = f"pruebas_seed_{semilla}.csv"
+    ruta_csv = os.path.join(ruta_guardado, nombre_csv)
+    existe = os.path.isfile(ruta_csv)
+
+    with open(ruta_csv, mode="a", newline='') as archivo:
+        escritor = csv.writer(archivo)
+        if not existe:
+            escritor.writerow(
+                ["sigma", "RMSE circulo", "RMSE cuadrado", "RMSE fondo", "RMSE Imagen total"])
+        escritor.writerow([desviacion_estandar, rmse_c,
+                          rmse_s, rmse_f, rmse_tot])
+    print(f"Guardadas las imágenes y RMSE para {desviacion_estandar}")
 
 
 def calcular_rmse(imagen_original, imagen_filtrada, mascara):
@@ -81,18 +140,4 @@ if __name__ == "__main__":
     # 0 para la identidad (la imagen final solo tendrá el ruido poisson sin distribución Gaussiana)
     desviacion_estandar = 0
 
-    # Sección de código
-    imagen_og, mascaras = crear_lienzo()
-    circulo, cuadrada, fondo = mascaras
-    visualizacion(imagen_og, "imagen original")
-    lienzo_poisson = añadir_ruido(imagen_og, semilla)
-    kernel = calcular_kernel(desviacion_estandar)
-    imagen_filtrada = aplicar_kernel(lienzo_poisson, kernel)
-    visualizacion(imagen_filtrada,
-                  "imagen con filtro poisson y distribución gaussiana")
-    print("RMSE circulo (kernel aplicado):", calcular_rmse(
-        imagen_og, imagen_filtrada, circulo))
-    print("RMSE cuadrado (kernel aplicado):", calcular_rmse(
-        imagen_og, imagen_filtrada, cuadrada))
-    print("RMSE fondo (kernel aplicado):", calcular_rmse(
-        imagen_og, imagen_filtrada, fondo))
+    obtener_imagen_final(semilla, desviacion_estandar)
