@@ -65,18 +65,23 @@ def aplicar_kernel(imagen, kernel):
 
 
 def obtener_imagen_final(semilla: int, desviacion_estandar: float,
-                         mostrar_og: bool = True, mostrar_final: bool = True, ruta_complementaria: str = ""):
+                         mostrar_og: bool = True, mostrar_final: bool = True, ruta_complementaria: str = "", pasada_fina=False):
     # Setting para guardar
     ruta = os.path.dirname(__file__)
     ruta_guardado = os.path.join(
-        ruta, "Resultados_P1", ruta_complementaria, f"seed_{semilla}")
+        ruta, "Resultados_P1", "Exp12", ruta_complementaria, f"seed_{semilla}")
+    if pasada_fina:
+        ruta_guardado += "_pasada_fina"
     os.makedirs(ruta_guardado, exist_ok=True)
+    print(f"Definida la ruta de guardado: {ruta_guardado}")
+
     # Código para calcular
     imagen_og, mascaras = crear_lienzo()
     circulo, cuadrada, fondo = mascaras
 
     if mostrar_og:  # Mostrar imagen original
         visualizacion(imagen_og, "imagen original")
+
     # Añadir poisson y convolución con el kernel
     imagen_poisson = añadir_ruido(imagen_og, semilla)
     kernel = calcular_kernel(desviacion_estandar)
@@ -116,7 +121,9 @@ def obtener_imagen_final(semilla: int, desviacion_estandar: float,
                 ["sigma", "RMSE circulo", "RMSE cuadrado", "RMSE fondo", "RMSE Imagen total"])
         escritor.writerow([desviacion_estandar, rmse_c,
                           rmse_s, rmse_f, rmse_tot])
-    print(f"Guardadas las imágenes y RMSE para {desviacion_estandar}")
+    print(
+        f"Guardadas las imágenes y RMSE para {semilla}, {desviacion_estandar}")
+    return ruta_guardado
 
 
 def calcular_rmse(imagen_original, imagen_filtrada, mascara):
