@@ -73,7 +73,6 @@ def obtener_imagen_final(semilla: int, desviacion_estandar: float,
     if pasada_fina:
         ruta_guardado += "_pasada_fina"
     os.makedirs(ruta_guardado, exist_ok=True)
-    print(f"Definida la ruta de guardado: {ruta_guardado}")
 
     # Código para calcular
     imagen_og, mascaras = crear_lienzo()
