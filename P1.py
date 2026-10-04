@@ -68,7 +68,8 @@ def obtener_imagen_final(semilla: int, desviacion_estandar: float,
                          mostrar_og: bool = True, mostrar_final: bool = True, ruta_complementaria: str = ""):
     # Setting para guardar
     ruta = os.path.dirname(__file__)
-    ruta_guardado = os.path.join(ruta, "Resultados_P1", ruta_complementaria)
+    ruta_guardado = os.path.join(
+        ruta, "Resultados_P1", ruta_complementaria, f"seed_{semilla}")
     os.makedirs(ruta_guardado, exist_ok=True)
     # Código para calcular
     imagen_og, mascaras = crear_lienzo()
@@ -86,8 +87,7 @@ def obtener_imagen_final(semilla: int, desviacion_estandar: float,
                       "imagen con filtro poisson y distribución gaussiana")
 
     # Segmento de guardado
-    nombre_img_original = f"{desviacion_estandar}_img_og.png"
-    ruta_img_og = os.path.join(ruta_guardado, nombre_img_original)
+    ruta_img_og = os.path.join(ruta_guardado, "img_og.png")
     imagen_para_guardar_inicial = (
         imagen_og * 255).clip(0, 255).astype(np.uint8)
     cv2.imwrite(ruta_img_og, imagen_para_guardar_inicial)
