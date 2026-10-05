@@ -27,7 +27,7 @@ def exp_12(semilla, pasada_fina=False):
 
 
 if __name__ == "__main__":
-    semillas = (676767, 64, 69, 415, 511, 1364, 14209)
+    semillas = (676767, 64, 69, 415, 511, 1364, 14209, 69420)
     for seed in semillas:
         exp_12(seed, False)
         exp_12(seed, True)
