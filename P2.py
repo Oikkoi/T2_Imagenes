@@ -55,12 +55,23 @@ def cVT(variables: dict):
     return c
 
 
-def c_p1():
-    pass
+def c_p1(variables: dict):
+    """inspirado en el modelo exponencial"""
+    gradiente_u = variables["magnitud_gradiente"]
+    k = variables["k"]
+    return np.exp(- ((gradiente_u/k) ** 2))
 
 
-def c_p2():
-    pass
+def c_p2(variables: dict):
+    """inspirado en el modelo fraccional"""
+    gradiente_u = variables["magnitud_gradiente"]
+    laplaciano = np.abs(variables["laplaciano"])
+    k = variables["k"]
+    puntos_x = (0, k/2, k, 2*k)
+    puntos_y = (0, 0.5, 1, 1)
+    b = np.interp(laplaciano, puntos_x, puntos_y)
+    E = (1 - b) * gradiente_u + b * laplaciano
+    return 1 / (1 + (E/k)**2)
 
 
 def calcular_rmse(imagen_original, imagen_difusa, ruta_csv) -> float:
@@ -99,7 +110,7 @@ def calcular_laplaciano(dif_arriba, dif_abajo, dif_derecha, dif_izquierda):
     return laplaciano, u_x, u_y
 
 
-def difusion_ansitropica(imagen_ruidosa, paso_temporal, e, funcion_c, numero_de_iteraciones: int):
+def difusion_ansitropica(imagen_ruidosa, paso_temporal, e, umbral_de_contraste, funcion_c, numero_de_iteraciones: int):
     imagen_actual = imagen_ruidosa.copy()
     for i in range(numero_de_iteraciones):
         print(f"Iniciando iteración {i}")
@@ -115,6 +126,7 @@ def difusion_ansitropica(imagen_ruidosa, paso_temporal, e, funcion_c, numero_de_
             "gradiente_y": u_y,
             "lambda": paso_temporal,
             "e": e,
+            "k": umbral_de_contraste,
             "N": numero_de_iteraciones,
             "magnitud_gradiente": magnitud_gradiente
         }
@@ -140,12 +152,16 @@ if __name__ == "__main__":
     # variables
     seed = 67676767
     imagen = "cameraman.png"
-    paso_temporal = 0.002
-    e = 0.01
-    N = 40
-    nombre_imagen = f"procesada_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}.tiff"
+    paso_temporal = 0.25
+    e = 0.1
+    umbral_de_contraste = 0.03
+    N = 60
+    funcion_c = c_p2
+
+    # guardado
+    nombre_imagen = f"procesada_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.tiff"
     nombre_ruido = f"ruido.png"
-    nombre_csv = f"paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}.csv"
+    nombre_csv = f"paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.csv"
     folder = os.path.join(os.path.dirname(__file__),
                           "Resultados_P2", f"seed_{str(seed)}", f"{imagen.split(".")[0]}")
     os.makedirs(folder, exist_ok=True)
@@ -157,8 +173,11 @@ if __name__ == "__main__":
     imagen_normalizada = cargar_imagen_normalizar(imagen)
     imagen_ruidosa = agregar_ruido_gaussiano(imagen_normalizada, seed)
     imagen_difusa = difusion_ansitropica(
-        imagen_ruidosa, paso_temporal, e, cVT, N)
-    rmse = calcular_rmse(imagen_normalizada, imagen_difusa, ruta_csv)
+        imagen_ruidosa, paso_temporal, e, umbral_de_contraste, funcion_c, N)
+    rmse_og_terminada = calcular_rmse(
+        imagen_normalizada, imagen_difusa, ruta_csv)
+    rmse_og_ruidosa = calcular_rmse(
+        imagen_normalizada, imagen_ruidosa, ruta_csv)
     imagen_terminada = desnormalizar_imagen(imagen_difusa)
     imagen_ruido = desnormalizar_imagen(imagen_ruidosa)
     io.imsave(ruta_imagen, imagen_terminada)
