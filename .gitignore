@@ -5,3 +5,7 @@ enunciado.pdf
 Resultados_P1/
 __pycache__/
 test_image.png
+imagen_gray_procesada.tiff
+imagen_gray_procesada.png
+convertidor_tif_png.py
+Resultados_P2/
