@@ -57,41 +57,52 @@ def cVT(variables: dict):
 
 def c_p1(variables: dict):
     """inspirado en el modelo exponencial"""
-    gradiente_u = variables["magnitud_gradiente"]
+    u_x = np.abs(variables["u_x_suave"])
+    u_y = np.abs(variables["u_y_suave"])
     k = variables["k"]
-    return np.exp(- ((gradiente_u/k) ** 2))
+    E = u_x + u_y
+    return np.exp(- ((E/k) ** 2))
 
 
 def c_p2(variables: dict):
-    """inspirado en el modelo fraccional"""
-    gradiente_u = variables["magnitud_gradiente"]
-    laplaciano = np.abs(variables["laplaciano"])
+    """inspirado en el modelo fraccional.
+    E = (1 - b)·|gradiente u|, con b = clip(r/umbral laplaciano, 0, 1) y r = laplaciano / (gradiente u + δ).
+    """
+    gradiente_u = variables["magnitud_gradiente_suave"]
+    laplaciano = np.abs(variables["laplaciano_suave"])
     k = variables["k"]
-    puntos_x = (0, k/2, k, 2*k)
-    puntos_y = (0, 0.5, 1, 1)
-    b = np.interp(laplaciano, puntos_x, puntos_y)
-    E = (1 - b) * gradiente_u + b * laplaciano
-    return 1 / (1 + (E/k)**2)
+    umbral_laplaciano = variables["umbral_laplaciano"]
+    razon = laplaciano / (gradiente_u + 1e-6)   # δ=1e-6 evita 0/0
+    b = np.clip(razon / umbral_laplaciano, 0, 1)
+    E = (1 - b) * gradiente_u
+    return 1 / (1 + (E / k) ** 2)
 
 
-def calcular_rmse(imagen_original, imagen_difusa, ruta_csv) -> float:
-    """
-    Recibe la imagen original Y la imagen final
-    Retorna el error entre ambos
-    """
-    error = imagen_original - imagen_difusa
-    media = np.mean(error**2)
-    rmse = np.sqrt(media)
+def calcular_rmse(imagen_original, imagen_comparada) -> float:
+    """Recibe la imagen original y la imagen a comparar, ambas float en [0,1].
+    Retorna el RMSE."""
+    error = imagen_original - imagen_comparada
+    return float(np.sqrt(np.mean(error ** 2)))
 
+
+def guardar_fila(ruta_csv, tipo, rmse, imagen, seed, funcion_c,
+                 paso_temporal, N, e, k, rho, peso):
+    """Agrega una fila al CSV. Los parámetros que la función no usa quedan en '-'."""
+    COLUMNAS = ["imagen", "semilla", "funcion", "lambda", "N", "e", "k", "rho",
+                "peso_suavizado", "tipo", "MSE", "RMSE"]
+    nombre = funcion_c.__name__
+    fila = [imagen, seed, nombre, paso_temporal, N,
+            e if nombre == "cVT" else "-",
+            k if nombre in ("c_p1", "c_p2") else "-",
+            rho if nombre == "c_p2" else "-",
+            peso if nombre in ("c_p1", "c_p2") else "-",
+            tipo, rmse ** 2, rmse]
     existe = os.path.isfile(ruta_csv)
-    with open(ruta_csv, mode="a", newline='') as archivo:
+    with open(ruta_csv, mode="a", newline="") as archivo:
         escritor = csv.writer(archivo)
         if not existe:
-            escritor.writerow(
-                ["MSE", "RMSE"])
-        escritor.writerow([media,
-                          rmse])
-    return rmse
+            escritor.writerow(COLUMNAS)
+        escritor.writerow(fila)
 
 
 def restas_imagen(imagen):
@@ -110,7 +121,10 @@ def calcular_laplaciano(dif_arriba, dif_abajo, dif_derecha, dif_izquierda):
     return laplaciano, u_x, u_y
 
 
-def difusion_ansitropica(imagen_ruidosa, paso_temporal, e, umbral_de_contraste, funcion_c, numero_de_iteraciones: int):
+def difusion_ansitropica(imagen_ruidosa, paso_temporal, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano: float, funcion_c, numero_de_iteraciones: int):
+    if not (0 <= peso_laplaciano <= 0.25):
+        raise ValueError("peso_laplaciano debe estar entre 0 y 0.25")
+
     imagen_actual = imagen_ruidosa.copy()
     for i in range(numero_de_iteraciones):
         print(f"Iniciando iteración {i}")
@@ -120,17 +134,31 @@ def difusion_ansitropica(imagen_ruidosa, paso_temporal, e, umbral_de_contraste, 
             arriba, abajo, derecha, izquierda)
         magnitud_gradiente = np.sqrt(u_x**2 + u_y**2)
 
+        imagen_suavizada = imagen_actual + peso_laplaciano * laplaciano
+        arriba_suave, abajo_suave, derecha_suave, izquierda_suave = restas_imagen(
+            imagen_suavizada)
+        laplaciano_suave, ux_suave, uy_suave = calcular_laplaciano(
+            arriba_suave, abajo_suave, derecha_suave, izquierda_suave)
+        gradiente_suavizado = np.sqrt(ux_suave**2 + uy_suave**2)
+
         variables = {
+            "laplaciano_suave": laplaciano_suave,
+            "u_x_suave": ux_suave,
+            "u_y_suave": uy_suave,
             "laplaciano": laplaciano,
-            "gradiente_x": u_x,
-            "gradiente_y": u_y,
+            "u_x": u_x,
+            "u_y": u_y,
             "lambda": paso_temporal,
             "e": e,
+            "umbral_laplaciano": umbral_laplaciano,
             "k": umbral_de_contraste,
             "N": numero_de_iteraciones,
-            "magnitud_gradiente": magnitud_gradiente
+            "magnitud_gradiente": magnitud_gradiente,
+            "magnitud_gradiente_suave": gradiente_suavizado
         }
         c = funcion_c(variables)
+        if i == 0:
+            mapa_c_inicial = c.copy()
         print(f"iter {i}: c_min={c.min():.4f}, c_max={c.max():.4f}")
         c_arriba, c_abajo, c_derecha, c_izquierda = restas_imagen(c)
 
@@ -145,40 +173,50 @@ def difusion_ansitropica(imagen_ruidosa, paso_temporal, e, umbral_de_contraste, 
                  (c + c_derecha / 2) * derecha +
                  (c + c_izquierda / 2) * izquierda)
         imagen_actual += flujo * paso_temporal
-    return imagen_actual
+    return imagen_actual, mapa_c_inicial, c
 
 
 if __name__ == "__main__":
     # variables
     seed = 67676767
     imagen = "cameraman.png"
-    paso_temporal = 0.25
-    e = 0.1
-    umbral_de_contraste = 0.03
+    paso_temporal = 0.125
+    e = 0.2
+    umbral_de_contraste = 0.02
+    umbral_laplaciano = 3
+    peso_laplaciano = 0.25
     N = 60
-    funcion_c = c_p2
+    funcion_c = c_p1
 
-    # guardado
-    nombre_imagen = f"procesada_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.tiff"
+    # zona_nombres
+    nombre_imagen = f"procesada_funcion_{(funcion_c.__name__)}_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.tiff"
     nombre_ruido = f"ruido.png"
-    nombre_csv = f"paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.csv"
+
     folder = os.path.join(os.path.dirname(__file__),
                           "Resultados_P2", f"seed_{str(seed)}", f"{imagen.split(".")[0]}")
     os.makedirs(folder, exist_ok=True)
     ruta_imagen = os.path.join(folder, nombre_imagen)
     ruta_ruido = os.path.join(folder, nombre_ruido)
-    ruta_csv = os.path.join(folder, nombre_csv)
+    ruta_csv = os.path.join(folder, "resultados.csv")
 
     # test_code
     imagen_normalizada = cargar_imagen_normalizar(imagen)
     imagen_ruidosa = agregar_ruido_gaussiano(imagen_normalizada, seed)
-    imagen_difusa = difusion_ansitropica(
-        imagen_ruidosa, paso_temporal, e, umbral_de_contraste, funcion_c, N)
-    rmse_og_terminada = calcular_rmse(
-        imagen_normalizada, imagen_difusa, ruta_csv)
-    rmse_og_ruidosa = calcular_rmse(
-        imagen_normalizada, imagen_ruidosa, ruta_csv)
+    imagen_difusa, c_inicial, c_final = difusion_ansitropica(
+        imagen_ruidosa, paso_temporal, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano, funcion_c, N)
     imagen_terminada = desnormalizar_imagen(imagen_difusa)
     imagen_ruido = desnormalizar_imagen(imagen_ruidosa)
+
+    # zona guardar
     io.imsave(ruta_imagen, imagen_terminada)
     io.imsave(ruta_ruido, imagen_ruido)
+    np.save(os.path.join(
+        folder, f"c_inicial_{funcion_c.__name__}_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.npy"), c_inicial)
+    np.save(os.path.join(
+        folder, f"c_final_{funcion_c.__name__}_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.npy"), c_final)
+    rmse_difusa = calcular_rmse(imagen_normalizada, imagen_difusa)
+    rmse_ruidosa = calcular_rmse(imagen_normalizada, imagen_ruidosa)
+    guardar_fila(ruta_csv, "difusa", rmse_difusa, imagen, seed, funcion_c,
+                 paso_temporal, N, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano)
+    guardar_fila(ruta_csv, "ruidosa", rmse_ruidosa, imagen, seed, funcion_c,
+                 paso_temporal, N, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano)
