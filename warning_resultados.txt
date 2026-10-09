@@ -1,0 +1,2 @@
+warnings.warn(
+/home/max/Proyectos/T2_Imagenes/P2.py:166: UserWarning: Iteración 196: paso temporal λ=1.05 excede la cota de estabilidad λ_max=1/(4·c_max)=0.75000 (c_max=0.333). El resultado podría mostrar una amplificación en lugar de suavizado

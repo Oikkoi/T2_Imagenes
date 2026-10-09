@@ -66,13 +66,13 @@ def c_p1(variables: dict):
 
 def c_p2(variables: dict):
     """inspirado en el modelo fraccional.
-    E = (1 - b)·|gradiente u|, con b = clip(r/umbral laplaciano, 0, 1) y r = laplaciano / (gradiente u + δ).
+    E = (1 - b)·|gradiente u|, con b = clip(r/umbral laplaciano, 0, 1) y r = laplaciano / (gradiente u + delta).
     """
     gradiente_u = variables["magnitud_gradiente_suave"]
     laplaciano = np.abs(variables["laplaciano_suave"])
     k = variables["k"]
     umbral_laplaciano = variables["umbral_laplaciano"]
-    razon = laplaciano / (gradiente_u + 1e-6)   # δ=1e-6 evita 0/0
+    razon = laplaciano / (gradiente_u + 1e-6)   # delta=1e-6 evita 0/0
     b = np.clip(razon / umbral_laplaciano, 0, 1)
     E = (1 - b) * gradiente_u
     return 1 / (1 + (E / k) ** 2)
@@ -127,7 +127,7 @@ def difusion_ansitropica(imagen_ruidosa, paso_temporal, e, umbral_de_contraste, 
 
     imagen_actual = imagen_ruidosa.copy()
     for i in range(numero_de_iteraciones):
-        print(f"Iniciando iteración {i}")
+        # print(f"Iniciando iteración {i}")
 
         arriba, abajo, derecha, izquierda = restas_imagen(imagen_actual)
         laplaciano, u_x, u_y = calcular_laplaciano(
@@ -159,7 +159,7 @@ def difusion_ansitropica(imagen_ruidosa, paso_temporal, e, umbral_de_contraste, 
         c = funcion_c(variables)
         if i == 0:
             mapa_c_inicial = c.copy()
-        print(f"iter {i}: c_min={c.min():.4f}, c_max={c.max():.4f}")
+        # print(f"iter {i}: c_min={c.min():.4f}, c_max={c.max():.4f}")
         c_arriba, c_abajo, c_derecha, c_izquierda = restas_imagen(c)
 
         if (paso_temporal > (1/(4*c.max()))):
