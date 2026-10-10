@@ -82,7 +82,7 @@ def calcular_rmse(imagen_original, imagen_comparada) -> float:
     """Recibe la imagen original y la imagen a comparar, ambas float en [0,1].
     Retorna el RMSE."""
     error = imagen_original - imagen_comparada
-    return float(np.sqrt(np.mean(error ** 2)))
+    return np.round(float(np.sqrt(np.mean(error ** 2))), 5)
 
 
 def guardar_fila(ruta_csv, tipo, rmse, imagen, seed, funcion_c,
@@ -181,19 +181,21 @@ if __name__ == "__main__":
     seed = 67676767
     imagen = "cameraman.png"
     paso_temporal = 0.125
-    e = 0.2
+    e = 10
     umbral_de_contraste = 0.02
     umbral_laplaciano = 3
     peso_laplaciano = 0.25
-    N = 60
-    funcion_c = c_p1
+    N = 30
+    funcion_c = cVT
 
     # zona_nombres
     nombre_imagen = f"procesada_funcion_{(funcion_c.__name__)}_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.tiff"
     nombre_ruido = f"ruido.png"
 
-    folder = os.path.join(os.path.dirname(__file__),
+    """folder = os.path.join(os.path.dirname(__file__),
                           "Resultados_P2", f"seed_{str(seed)}", f"{imagen.split(".")[0]}")
+    """
+    folder = os.path.join(os.path.dirname(__file__), "Resultados_P2")
     os.makedirs(folder, exist_ok=True)
     ruta_imagen = os.path.join(folder, nombre_imagen)
     ruta_ruido = os.path.join(folder, nombre_ruido)
@@ -210,13 +212,16 @@ if __name__ == "__main__":
     # zona guardar
     io.imsave(ruta_imagen, imagen_terminada)
     io.imsave(ruta_ruido, imagen_ruido)
+    """
     np.save(os.path.join(
         folder, f"c_inicial_{funcion_c.__name__}_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.npy"), c_inicial)
     np.save(os.path.join(
-        folder, f"c_final_{funcion_c.__name__}_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.npy"), c_final)
+        folder, f"c_final_{funcion_c.__name__}_paso_{str(paso_temporal)}_e_{str(e)}_N_{str(N)}_K_{str(umbral_de_contraste)}.npy"), c_final)"""
     rmse_difusa = calcular_rmse(imagen_normalizada, imagen_difusa)
-    rmse_ruidosa = calcular_rmse(imagen_normalizada, imagen_ruidosa)
-    guardar_fila(ruta_csv, "difusa", rmse_difusa, imagen, seed, funcion_c,
+    print(rmse_difusa)
+    # rmse_ruidosa = calcular_rmse(imagen_normalizada, imagen_ruidosa)
+    """guardar_fila(ruta_csv, "difusa", rmse_difusa, imagen, seed, funcion_c,
                  paso_temporal, N, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano)
     guardar_fila(ruta_csv, "ruidosa", rmse_ruidosa, imagen, seed, funcion_c,
                  paso_temporal, N, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano)
+    """

@@ -1,85 +1,202 @@
 import os
-import contextlib
-import warnings
-from P2 import (cVT, c_p1, c_p2, cargar_imagen_normalizar, agregar_ruido_gaussiano,
-                difusion_ansitropica, calcular_rmse, guardar_fila)
+import matplotlib.pyplot as plt
+from P2 import difusion_ansitropica, calcular_rmse, cVT, cargar_imagen_normalizar, desnormalizar_imagen, agregar_ruido_gaussiano, c_p1, c_p2
 
-seeds = (67676767, 69420, 1234)
-imagen = "cameraman.png"
-# paso_temporal = fracción * paso_temporal_max, paso_temporal_max = 1/(4*c_max) | c_max = 1/e en TV y 1 en c_p1 y c_p2).
-
-# fracciones para calcular el paso temporal actual
-fracciones = (0.1, 0.5, 0.9, 1.4)
-es = (0.2, 1, 0.01, 3)  # Valores para e en TV
-umbrales_de_contrastes = (0.02, 0.05, 1)
-umbrales_laplaciano = (1, 3, 0.1, 5)
-pesos_laplaciano = (0.1, 0.125, 0.25)
-Ns = (10, 40, 70, 100, 200)  # numeros de corrida
-funciones_c = (cVT, c_p1, c_p2)
+folder = os.path.join(os.path.dirname(__file__), "Resultados_P2")
 
 
-def es_repetida(funcion_c, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano):
-    """True si la corrida repetiría otra idéntica: cada función ignora algunos parámetros,
-    así que solo se corre el primer valor de los que ignora.
-    cVT usa solo e | c_p1 usa k y peso | c_p2 usa k, rho y peso"""
-    if funcion_c is cVT:
-        return (umbral_de_contraste != umbrales_de_contrastes[0]
-                or umbral_laplaciano != umbrales_laplaciano[0]
-                or peso_laplaciano != pesos_laplaciano[0])
-    if funcion_c is c_p1:
-        return e != es[0] or umbral_laplaciano != umbrales_laplaciano[0]
-    return e != es[0]   # c_p2
+# mapas cTV para distintos e
+def mapas_cTV(es_mapas: tuple = (0.01, 0.2, 1, 3)):
+    # Parámetros
+    seed = 67676767
+    imagen = "cameraman.png"
+    paso_temporal = 0.002
+    umbral_de_contraste = 0.02
+    umbral_laplaciano = 1
+    peso_laplaciano = 0.25
+    e = 0.1
+    N = 10
+    fraccion = 0.4
+    funcion_c = cVT
 
-
-# corridas por semilla (para mostrar el avance)
-n_p, n_e, n_k, n_r, n_w, n_N = (len(fracciones), len(es), len(umbrales_de_contrastes),
-                                len(umbrales_laplaciano), len(pesos_laplaciano), len(Ns))
-por_semilla = n_p * n_N * (n_e + n_k * n_w + n_k * n_r * n_w)
-total = por_semilla * len(seeds)
-hechas = 0
-
-for seed in seeds:
-    folder = os.path.join(os.path.dirname(__file__),
-                          "Resultados_P2", f"seed_{str(seed)}", f"{imagen.split('.')[0]}")
-    os.makedirs(folder, exist_ok=True)
-    ruta_csv = os.path.join(folder, "resultados.csv")
-
+    # Llamado funciones
     imagen_normalizada = cargar_imagen_normalizar(imagen)
     imagen_ruidosa = agregar_ruido_gaussiano(imagen_normalizada, seed)
-    rmse_ruidosa = calcular_rmse(imagen_normalizada, imagen_ruidosa)
+    imagen_difusa, c_inicial, c_final = difusion_ansitropica(
+        imagen_ruidosa, paso_temporal, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano, funcion_c, N)
+    imagen_terminada = desnormalizar_imagen(imagen_difusa)
+    imagen_ruido = desnormalizar_imagen(imagen_ruidosa)
+    # Iteracion
+    ruta_mapas = os.path.join(folder, "mapas_cTV.png")
+    fig, ax = plt.subplots(3, len(es_mapas), figsize=(16, 12))
+    for j, e_prueba in enumerate(es_mapas):
+        c_max = 1 / e_prueba
+        imagen_prueba, c_ini, c_fin = difusion_ansitropica(
+            imagen_ruidosa, paso_temporal, e_prueba, umbral_de_contraste,
+            umbral_laplaciano, peso_laplaciano, cVT, N)
+        rmse_prueba = calcular_rmse(imagen_normalizada, imagen_prueba)
 
-    for fraccion in fracciones:
-        for e in es:
-            for umbral_de_contraste in umbrales_de_contrastes:
-                for umbral_laplaciano in umbrales_laplaciano:
-                    for peso_laplaciano in pesos_laplaciano:
-                        for N in Ns:
-                            for funcion_c in funciones_c:
-                                if es_repetida(funcion_c, e, umbral_de_contraste,
-                                               umbral_laplaciano, peso_laplaciano):
-                                    continue
+        mapa = ax[0, j].imshow(
+            e_prueba * c_ini, cmap="viridis", vmin=0, vmax=1)
+        ax[0, j].set_title(f"c inicial | e={e_prueba}, λ={paso_temporal:.4g}")
+        ax[1, j].imshow(e_prueba * c_fin, cmap="viridis", vmin=0, vmax=1)
+        ax[1, j].set_title(f"c final | N={N}")
+        ax[2, j].imshow(imagen_prueba, cmap="gray", vmin=0, vmax=1)
+        ax[2, j].set_title(f"resultado | RMSE={rmse_prueba:.4f}")
 
-                                if funcion_c is cVT:
-                                    c_max = 1 / e
-                                else:
-                                    1.0
+    for eje in ax.ravel():
+        eje.axis("off")
+    fig.colorbar(mapa, ax=ax[:2, :], shrink=0.6, label="e · c_TV")
+    fig.savefig(ruta_mapas, dpi=150, bbox_inches="tight")
+    return
 
-                                paso_temporal = fraccion / (4 * c_max)
 
-                                imagen_difusa, c_inicial, c_final = difusion_ansitropica(
-                                    imagen_ruidosa, paso_temporal, e, umbral_de_contraste,
-                                    umbral_laplaciano, peso_laplaciano, funcion_c, N)
+mapas_cTV()
 
-                                rmse_difusa = calcular_rmse(
-                                    imagen_normalizada, imagen_difusa)
 
-                                guardar_fila(ruta_csv, "difusa", rmse_difusa, imagen, seed, funcion_c,
-                                             paso_temporal, N, e, umbral_de_contraste,
-                                             umbral_laplaciano, peso_laplaciano)
-                                guardar_fila(ruta_csv, "ruidosa", rmse_ruidosa, imagen, seed, funcion_c,
-                                             paso_temporal, N, e, umbral_de_contraste,
-                                             umbral_laplaciano, peso_laplaciano)
+def mapas_cTV_lambda(es_mapas: tuple = (0.01, 0.2, 1, 3)):
+    # Parámetros
+    seed = 67676767
+    imagen = "cameraman.png"
+    pasos_temporales = (0.01, 0.05, 0.1, 1)
+    umbral_de_contraste = 0.02
+    umbral_laplaciano = 1
+    peso_laplaciano = 0.25
+    e = 0.1
+    N = 10
+    fraccion = 0.4
+    funcion_c = cVT
+    for paso_temporal in pasos_temporales:
+        # Llamado funciones
+        imagen_normalizada = cargar_imagen_normalizar(imagen)
+        imagen_ruidosa = agregar_ruido_gaussiano(imagen_normalizada, seed)
+        imagen_difusa, c_inicial, c_final = difusion_ansitropica(
+            imagen_ruidosa, paso_temporal, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano, funcion_c, N)
+        imagen_terminada = desnormalizar_imagen(imagen_difusa)
+        imagen_ruido = desnormalizar_imagen(imagen_ruidosa)
+        # Iteracion
+        ruta_mapas = os.path.join(
+            folder, f"mapas_cTV_lambda_{paso_temporal}.png")
+        fig, ax = plt.subplots(3, len(es_mapas), figsize=(16, 12))
 
-                                hechas += 1
-                                print(f"{hechas}/{total}  seed={seed} {funcion_c.__name__} "
-                                      f"paso={paso_temporal} N={N}", flush=True)
+        for j, e_prueba in enumerate(es_mapas):
+            c_max = 1 / e_prueba
+            imagen_prueba, c_ini, c_fin = difusion_ansitropica(
+                imagen_ruidosa, paso_temporal, e_prueba, umbral_de_contraste,
+                umbral_laplaciano, peso_laplaciano, cVT, N)
+            rmse_prueba = calcular_rmse(imagen_normalizada, imagen_prueba)
+
+            mapa = ax[0, j].imshow(
+                e_prueba * c_ini, cmap="viridis", vmin=0, vmax=1)
+            ax[0, j].set_title(
+                f"c inicial | e={e_prueba}, λ={paso_temporal:.4g}")
+            ax[1, j].imshow(e_prueba * c_fin, cmap="viridis", vmin=0, vmax=1)
+            ax[1, j].set_title(f"c final | N={N}")
+            ax[2, j].imshow(imagen_prueba, cmap="gray", vmin=0, vmax=1)
+            ax[2, j].set_title(f"resultado | RMSE={rmse_prueba:.4f}")
+        for eje in ax.ravel():
+            eje.axis("off")
+        fig.colorbar(mapa, ax=ax[:2, :], shrink=0.6, label="e · c_TV")
+        fig.savefig(ruta_mapas, dpi=150, bbox_inches="tight")
+    return
+
+
+# mapas_cTV_lambda()
+
+
+def mapas_cp1_lambda(es_mapas: tuple = (0.01, 0.2, 1, 3)):
+    # Parámetros
+    seed = 67676767
+    imagen = "cameraman.png"
+    umbral_laplaciano = 1
+    peso_laplaciano = 0.25
+    paso_temporal = 0.1
+    e = 0.1
+    N = 60
+    fraccion = 0.4
+    funcion_c = c_p1
+    for umbral_de_contraste in es_mapas:
+        # Llamado funciones
+        imagen_normalizada = cargar_imagen_normalizar(imagen)
+        imagen_ruidosa = agregar_ruido_gaussiano(imagen_normalizada, seed)
+        imagen_difusa, c_inicial, c_final = difusion_ansitropica(
+            imagen_ruidosa, paso_temporal, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano, funcion_c, N)
+        imagen_terminada = desnormalizar_imagen(imagen_difusa)
+        imagen_ruido = desnormalizar_imagen(imagen_ruidosa)
+        # Iteracion
+        ruta_mapas = os.path.join(
+            folder, f"mapas_cp1_lambda_{paso_temporal}.png")
+        fig, ax = plt.subplots(3, len(es_mapas), figsize=(16, 12))
+
+        for j, e_prueba in enumerate(es_mapas):
+            c_max = 1 / e_prueba
+            imagen_prueba, c_ini, c_fin = difusion_ansitropica(
+                imagen_ruidosa, paso_temporal, e_prueba, umbral_de_contraste,
+                umbral_laplaciano, peso_laplaciano, c_p1, N)
+            rmse_prueba = calcular_rmse(imagen_normalizada, imagen_prueba)
+
+            mapa = ax[0, j].imshow(
+                e_prueba * c_ini, cmap="viridis", vmin=0, vmax=1)
+            ax[0, j].set_title(
+                f"c inicial | k={e_prueba}, λ={paso_temporal:.4g}")
+            ax[1, j].imshow(e_prueba * c_fin, cmap="viridis", vmin=0, vmax=1)
+            ax[1, j].set_title(f"c final | N={N}")
+            ax[2, j].imshow(imagen_prueba, cmap="gray", vmin=0, vmax=1)
+            ax[2, j].set_title(f"resultado | RMSE={rmse_prueba:.4f}")
+        for eje in ax.ravel():
+            eje.axis("off")
+        fig.colorbar(mapa, ax=ax[:2, :], shrink=0.6, label="k · c_p1")
+        fig.savefig(ruta_mapas, dpi=150, bbox_inches="tight")
+    return
+
+
+def mapas_cp2_lambda(es_mapas: tuple = (0.01, 0.2, 1, 3)):
+    # Parámetros
+    seed = 67676767
+    imagen = "cameraman.png"
+    paso_temporal = 0.02
+    umbral_laplaciano = 1
+    peso_laplaciano = 0.25
+    e = 0.1
+    N = 30
+    fraccion = 0.4
+    funcion_c = c_p1
+    for umbral_de_contraste in es_mapas:
+        # Llamado funciones
+        imagen_normalizada = cargar_imagen_normalizar(imagen)
+        imagen_ruidosa = agregar_ruido_gaussiano(imagen_normalizada, seed)
+        imagen_difusa, c_inicial, c_final = difusion_ansitropica(
+            imagen_ruidosa, paso_temporal, e, umbral_de_contraste, umbral_laplaciano, peso_laplaciano, funcion_c, N)
+        imagen_terminada = desnormalizar_imagen(imagen_difusa)
+        imagen_ruido = desnormalizar_imagen(imagen_ruidosa)
+        # Iteracion
+        ruta_mapas = os.path.join(
+            folder, f"mapas_cp2_lambda_{paso_temporal}.png")
+        fig, ax = plt.subplots(3, len(es_mapas), figsize=(16, 12))
+
+        for j, e_prueba in enumerate(es_mapas):
+            c_max = 1 / e_prueba
+            imagen_prueba, c_ini, c_fin = difusion_ansitropica(
+                imagen_ruidosa, paso_temporal, e_prueba, umbral_de_contraste,
+                umbral_laplaciano, peso_laplaciano, c_p1, N)
+            rmse_prueba = calcular_rmse(imagen_normalizada, imagen_prueba)
+
+            mapa = ax[0, j].imshow(
+                e_prueba * c_ini, cmap="viridis", vmin=0, vmax=1)
+            ax[0, j].set_title(
+                f"c inicial | k={e_prueba}, λ={paso_temporal:.4g}")
+            ax[1, j].imshow(e_prueba * c_fin, cmap="viridis", vmin=0, vmax=1)
+            ax[1, j].set_title(f"c final | N={N}")
+            ax[2, j].imshow(imagen_prueba, cmap="gray", vmin=0, vmax=1)
+            ax[2, j].set_title(f"resultado | RMSE={rmse_prueba:.4f}")
+        for eje in ax.ravel():
+            eje.axis("off")
+        fig.colorbar(mapa, ax=ax[:2, :], shrink=0.6, label="k · c_p2")
+        fig.savefig(ruta_mapas, dpi=150, bbox_inches="tight")
+    return
+
+
+# mapas_cp1_lambda()
+# mapas_cp2_lambda()
+
+def sacar_imagenes():

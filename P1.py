@@ -68,7 +68,6 @@ def calcular_kernel(sigma) -> np.array:
     if sigma == 0:
         lienzo = np.zeros((1, 1)) + 1
         return lienzo
-    # 3 sigma porque contiene el 99,46% de la campana, con la función ceil es un poco más
     radio = np.ceil(3*sigma)
     vector_k = np.arange(-radio, radio + 1)
     kernel_1d = np.exp(-(vector_k**2) / (2 * (sigma**2)))
@@ -228,6 +227,34 @@ def aplicar_filtro_adaptativo(mapa_sigma, banco_imagenes, sigmas):
     return resultado
 
 
+def mapa_a_imagen(mapa, vmin, vmax, titulo="", escala=3, ancho_barra=30):
+    """Convierte un mapa 2D en una imagen BGR con barra de color, escala numérica y título."""
+    FUENTE = cv2.FONT_HERSHEY_SIMPLEX
+    norm = np.clip((mapa - vmin) / (vmax - vmin), 0, 1)
+    color = cv2.applyColorMap(
+        (norm * 255).astype(np.uint8), cv2.COLORMAP_VIRIDIS)
+
+    color = cv2.resize(color, None, fx=escala, fy=escala,
+                       interpolation=cv2.INTER_NEAREST)
+    alto = color.shape[0]
+
+    gradiente = np.linspace(255, 0, alto).astype(np.uint8).reshape(-1, 1)
+    barra = cv2.applyColorMap(np.repeat(gradiente, ancho_barra, axis=1),
+                              cv2.COLORMAP_VIRIDIS)
+    panel = np.full((alto, 80, 3), 255, np.uint8)
+    for valor, y in ((vmax, 15), ((vmin + vmax) / 2, alto // 2), (vmin, alto - 5)):
+        cv2.putText(panel, f"{valor:.2f}", (5, y), FUENTE, 0.5, (0, 0, 0), 1,
+                    cv2.LINE_AA)
+
+    cuerpo = np.hstack([color, barra, panel])
+
+    cabecera = np.full((30, cuerpo.shape[1], 3), 255, np.uint8)
+    cv2.putText(cabecera, titulo, (5, 20), FUENTE,
+                0.5, (0, 0, 0), 1, cv2.LINE_AA)
+
+    return np.vstack([cabecera, cuerpo])
+
+
 # El siguiente segmento de código es para ejecución o visualización general
 
 
@@ -241,7 +268,8 @@ if __name__ == "__main__":
     # Sección de valores alterables
     semilla = 676767
     s = 3  # 0 para la identidad (la imagen final solo tendrá el ruido poisson)
-
+    os.makedirs(os.path.join("Resultados_P1", "Exp12"), exist_ok=True)
+    os.makedirs(os.path.join("Resultados_P1", "Exp56"), exist_ok=True)
     imagen_og, mascaras = crear_lienzo()
     circulo, cuadrado, fondo = mascaras
     imagen_poisson = añadir_ruido(imagen_og, semilla)
@@ -251,6 +279,7 @@ if __name__ == "__main__":
     banco_imagenes, sigmas = banco_sigmas(imagen_poisson, mapa_sigmas)
     imagen_final = aplicar_filtro_adaptativo(
         mapa_sigmas, banco_imagenes, sigmas)
+    imagen_global = aplicar_kernel(imagen_poisson, calcular_kernel(1.54))
     mascara_total = circulo | cuadrado | fondo
 
     print(
@@ -270,3 +299,23 @@ if __name__ == "__main__":
         f"RMSE adaptativo fondo: {calcular_rmse(imagen_og, imagen_final, fondo)}")
     print(
         f"RMSE adaptativo global: {calcular_rmse(imagen_og, imagen_final, mascara_total)}")
+    cv2.imwrite(os.path.join("Resultados_P1", "Exp56", "imagen_adaptativa.png"),
+                (imagen_final * 255).clip(0, 255).astype(np.uint8))
+    cv2.imwrite(os.path.join("Resultados_P1", "Exp56", "imagen_global.png"),
+                (imagen_global * 255).clip(0, 255).astype(np.uint8))
+    mapa_usado = mapa_a_imagen(mapa_sigmas, mapa_sigmas.min(),
+                               mapa_sigmas.max(), "Mapa utilizado")
+    diferencia = np.abs(imagen_final - imagen_global)
+    print(
+        f"diferencia máxima: {np.max(diferencia)}, media: {np.mean(diferencia)}")
+    cv2.imwrite(os.path.join("Resultados_P1", "Exp56", "diferencia_x100.png"),
+                (diferencia * 100 * 255).clip(0, 255).astype(np.uint8))
+    cv2.imwrite(os.path.join("Resultados_P1", "Exp56", "mapa_usado.png"),
+                (mapa_usado * 255).clip(0, 255).astype(np.uint8))
+
+    sigma_ideal = calcular_filtro_adaptativo(imagen_og)
+    desviacion = np.abs(mapa_sigmas - sigma_ideal)
+    print(
+        f"desviación máxima: {desviacion.max():.3f}, media: {desviacion.mean():.4f}")
+    cv2.imwrite(os.path.join("Resultados_P1", "Exp56", "desviacion_sigma.png"),
+                (desviacion / desviacion.max() * 255).astype(np.uint8))
