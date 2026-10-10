@@ -198,5 +198,3 @@ def mapas_cp2_lambda(es_mapas: tuple = (0.01, 0.2, 1, 3)):
 
 # mapas_cp1_lambda()
 # mapas_cp2_lambda()
-
-def sacar_imagenes():
